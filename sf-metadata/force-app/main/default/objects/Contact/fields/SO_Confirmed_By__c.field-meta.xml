@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>SO_Confirmed_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <externalId>false</externalId>
+    <label>SO Confirmed By</label>
+    <description>User who checked the SO Confirmed box. Auto-set by Flow.</description>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>SO Confirmed By Contacts</relationshipLabel>
+    <relationshipName>SO_Confirmed_By_Contacts</relationshipName>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Lookup</type>
+</CustomField>

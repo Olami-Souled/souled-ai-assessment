@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_SO_Assessment__c</fullName>
+    <externalId>false</externalId>
+    <label>AI SO Assessment</label>
+    <description>Claude AI's structured assessment of whether this student was correctly marked as 'Became Shomer Shabbos through Souled'. Auto-populated by the Souled AI Assessment service.</description>
+    <length>32768</length>
+    <trackTrending>false</trackTrending>
+    <type>LongTextArea</type>
+    <visibleLines>10</visibleLines>
+</CustomField>

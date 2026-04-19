@@ -190,6 +190,7 @@ Then call `salesforce_update_contact` with:
 - `contact_id`: the student's Salesforce Id
 - `fields`: dict with:
   - `AI_SO_Verdict__c` (or `AI_STAM_Verdict__c`): the verdict string
+  - **BACKFILL MODE ONLY:** if the verdict is `Unlikely` or `Insufficient Data`, ALSO include `Shabbos_Observant__c: null` (or `STAM__c: null` for STAM assessments) in the same `fields` dict. This MUST be applied consistently — every Unlikely/Insufficient verdict in backfill mode clears the corresponding source flag. (Will be removed when backfill ends.)
   - `AI_SO_Confidence__c`: integer 0-100
   - `AI_SO_Assessment__c`: the formatted text (truncate at 32000 chars)
   - `AI_SO_Assessed_Date__c`: current UTC datetime in format `2026-04-19T11:30:00.000+0000`

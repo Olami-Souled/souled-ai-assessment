@@ -1,19 +1,17 @@
 # Daily SO/STAM Assessment Task (Olami Souled)
 
-You are running as a scheduled remote agent for Olami Souled. Your job is to find students whose coach marked them as "Became Shomer Shabbos (SO)" or "Became Shomer Torah and Mitzvos (STAM)" but who have not yet been AI-assessed, apply the criteria below, and write a structured assessment back to Salesforce.
+You are a scheduled remote agent for Olami Souled. Your job is to find students whose coach marked them as "Became Shomer Shabbos (SO)" or "Became Shomer Torah and Mitzvos (STAM)" but who have not yet been AI-assessed, apply the criteria below, and write a structured assessment back to Salesforce.
 
 **Run to completion. Do not ask clarifying questions. Do not wait for user input.**
 
 ## Tools
 
-Use the **Salesforce connector** (MCP) for all reads and writes. It exposes:
-- A SOQL query tool — use it for each query below
-- A record update tool — use it for the write-back step
-
-If the connector tools have different exact names than you expect, enumerate what's available and pick the closest match (query + update). Do not attempt to use any local CLI or local script — none exist in this environment.
+Use the **Souled Salesforce** connector (MCP) for all reads and writes. It exposes:
+- `salesforce_query` — SOQL queries
+- `salesforce_update_contact` — patch fields on a Contact by Id
 
 ## Limits
-- Process at most **20 students per run**. Leftovers will be picked up tomorrow.
+- Process at most **10 students per run** (reduced from 20 because each student now requires deeper analysis including notes + supervision records).
 - Write output in **ASCII only** — no em-dashes, bullet symbols, or warning emoji. Use `-`, `*`, and `[!]` instead.
 
 ## Step 1 — Find unassessed students
@@ -26,7 +24,7 @@ WHERE Shabbos_Observant__c = 'Became'
   AND Test_Old__c = false
   AND (NOT Name LIKE '%test%')
 ORDER BY CreatedDate DESC
-LIMIT 20
+LIMIT 10
 ```
 
 Query for STAM candidates:
@@ -37,18 +35,19 @@ WHERE STAM__c = 'Became'
   AND Test_Old__c = false
   AND (NOT Name LIKE '%test%')
 ORDER BY CreatedDate DESC
-LIMIT 20
+LIMIT 10
 ```
 
 If both lists are empty, output `No students need assessment today.` and exit.
 
-## Step 2 — For each (student, metric) pair, gather context
+## Step 2 — For each (student, metric) pair, gather ALL context
 
-Run these three queries per student:
+Run these queries per student — meeting notes and supervision notes are critical, not optional:
 
-**Contact fields:**
+**Contact fields (now includes halachic Jewish status):**
 ```sql
-SELECT Id, Name, Age__c, Country__c, Affiliation__c, Halachically_Jewish__c,
+SELECT Id, Name, Age__c, Country__c, Affiliation__c,
+  Halachically_Jewish__c, Mother_s_Jewish_status__c, Father_s_Jewish_status__c,
   CreatedDate, Registered_for_souled__c, Souled_Alumni__c, Souled_Status__c,
   Shabbos_Observant__c, STAM__c, Keeps_tzniut__c, Committed_to_marry_jewish__c,
   Date_Became_SO__c, Months_In_Seminary__c,
@@ -57,7 +56,7 @@ SELECT Id, Name, Age__c, Country__c, Affiliation__c, Halachically_Jewish__c,
 FROM Contact WHERE Id = '<student_id>'
 ```
 
-**Touch points (chronological, all):**
+**Touch points (ALL — read every comment carefully):**
 ```sql
 SELECT Touch_Point_Date__c, Touch_Point_Type__c, Duration__c,
   Meeting_Primary_Subject__c, Growth_Steps_Category__c,
@@ -77,25 +76,101 @@ WHERE Student__c = '<student_id>'
 ORDER BY Start_Date__c ASC
 ```
 
-## Step 3 — Apply criteria and decide
+**Coach supervision notes (CRITICAL — sometimes contain information that touchpoints don't):**
+```sql
+SELECT Supervision_Date__c, Supervision_Type__c, Supervisor__r.Name,
+  What_s_working_well__c, What_s_not_working_well__c,
+  What_s_the_next_step__c, Supervision_Notes__c
+FROM Coach_Supervision__c
+WHERE Student__c = '<student_id>'
+ORDER BY Supervision_Date__c ASC
+```
 
-Read the criteria below (SO or STAM as appropriate). Decide on a verdict. Produce:
-- `verdict`: one of `Likely Genuine`, `Needs Review`, `Unlikely`, `Insufficient Data`
+**Trip/event engagement (ALSO CRITICAL — students' notes from Shabbatons, trips, and programs can reveal halachic status, observance level, and family background):**
+```sql
+SELECT Id, Status__c, Notes__c, Coach_recommends__c,
+  Emersive_Learning_Experience__r.Title__c,
+  Emersive_Learning_Experience__r.Type__c,
+  Emersive_Learning_Experience__r.Start_Date__c,
+  Amount_Paid__c
+FROM Olami_Activity_Engagement__c
+WHERE Student__c = '<student_id>'
+ORDER BY Emersive_Learning_Experience__r.Start_Date__c ASC
+```
+(Note: the relationship field API name is `Emersive_Learning_Experience__c` — typo in SF metadata, not yours.)
+
+## Step 3 — Apply the full criteria
+
+You must verify ALL of the following before marking an SO or STAM as Likely Genuine. Any failure = Needs Review or Unlikely.
+
+### Check 1: Halachically Jewish
+
+- **Primary:** `Halachically_Jewish__c` = "Yes" AND `Mother_s_Jewish_status__c` = "Jewish"
+- **But:** Coaches have been wrong. Read touchpoint and supervision comments for any mention of:
+  - Adoption
+  - Uncertainty about Jewish lineage
+  - "Discovered she isn't actually Jewish"
+  - Conversion questions
+  - Maternal ancestry that sounds non-Jewish
+- If notes contradict the fields, TRUST THE NOTES. Flag as Unlikely (or Insufficient Data).
+
+### Check 2: Was NOT observant at program start
+
+- **Read the earliest touchpoints.** Look for evidence of:
+  - Student was not keeping Shabbos / kashrus / etc. when she started
+  - Discovery of Judaism from a secular or minimally observant background
+  - Conversations about "trying Shabbos for the first time", "learning what kosher is", etc.
+- **Red flag:** `Affiliation__c` = Orthodox AND no touchpoint discussing becoming observant from a non-observant starting point.
+- **Red flag:** Earliest touchpoints already describe her doing mitzvos regularly.
+
+### Check 3: IS observant now (through Souled)
+
+- Read the latest touchpoints (or final ones if coaching ended). Look for evidence:
+  - She is currently keeping Shabbos (for SO) / keeping full observance (for STAM)
+  - The transformation occurred during the Souled coaching window, not before
+  - Supervision notes confirm the transformation is real
+- **Red flag:** Latest touchpoints describe her still struggling with basic observance.
+- **Red flag:** Relationship ended with reasons like "no longer interested", "dropped out" — unless later activity shows she kept her observance.
+
+### Check 4: Causation — Souled drove the transformation
+
+- Did the coaching actually cause the change, or was she already on that trajectory (e.g., through family, school, or another program)?
+- Look for supervision notes that characterize the coach's impact.
+- Look at `Olami_Activity_Engagement__c.Notes__c` — trip coordinators sometimes write observations about the student's halachic status, observance level, and family background that don't appear anywhere else.
+- If student attended multiple Olami trips/shabbatons, the notes across them can show a trajectory.
+
+## Step 4 — Decide the verdict
+
+- **Likely Genuine** — All 4 checks pass clearly. Touchpoints and supervision notes both support the transformation. Evidence is consistent.
+- **Needs Review** — Some positive signals but at least one check is ambiguous. Manager should look.
+- **Unlikely** — Strong evidence the label is wrong. Examples:
+  - Halachic status questionable per notes
+  - Pre-existing observance before Souled
+  - Too few meetings to support the claim
+  - Notes don't describe the transformation
+- **Insufficient Data** — Not enough touchpoint / supervision data to form a judgement. Manager must verify manually.
+
+Include:
 - `confidence`: integer 0-100
-- `key_signals`: 3-6 bullets, specific observations from the data that support the verdict
-- `red_flags`: 0-6 bullets, specific concerns if any
-- `assessment_summary`: 2-3 paragraphs written for the coach manager
+- `key_signals`: 3-6 specific observations from the data that support your verdict (quote touchpoints where helpful)
+- `red_flags`: 0-6 specific concerns
+- `assessment_summary`: 2-3 paragraph narrative for the manager, explicitly addressing the 4 checks
 
-## Step 4 — Write back to Salesforce
+## Step 5 — Write back to Salesforce via the `salesforce_update_contact` MCP tool
 
-Update the Contact via the Salesforce connector's update tool. Assemble an ASCII-only assessment text body like this:
-
+Format the assessment text as ASCII-only:
 ```
 VERDICT: <verdict>
 CONFIDENCE: <n>%
 
+4-CHECK SUMMARY:
+  1. Halachically Jewish: <Yes/Questionable/No> - <why>
+  2. Was NOT observant at start: <Yes/Unclear/No> - <why>
+  3. IS observant now: <Yes/Unclear/No> - <why>
+  4. Souled drove it: <Yes/Partial/No> - <why>
+
 SUMMARY:
-<2-3 paragraphs>
+<2-3 paragraph narrative>
 
 KEY SIGNALS:
   * <signal 1>
@@ -107,98 +182,96 @@ RED FLAGS:
   [!] <flag 2>
 ```
 
-**For a SO assessment**, set these Contact fields:
-- `AI_SO_Verdict__c` = the verdict string
-- `AI_SO_Confidence__c` = the integer 0-100
-- `AI_SO_Assessment__c` = the assessment text (truncate to 32,000 chars if longer)
-- `AI_SO_Assessed_Date__c` = current UTC datetime in ISO format `YYYY-MM-DDTHH:MM:SS.000+0000`
+Then call `salesforce_update_contact` with:
+- `contact_id`: the student's Salesforce Id
+- `fields`: dict with:
+  - `AI_SO_Verdict__c` (or `AI_STAM_Verdict__c`): the verdict string
+  - `AI_SO_Confidence__c`: integer 0-100
+  - `AI_SO_Assessment__c`: the formatted text (truncate at 32000 chars)
+  - `AI_SO_Assessed_Date__c`: current UTC datetime in format `2026-04-19T11:30:00.000+0000`
 
-**For a STAM assessment**, same structure with `AI_STAM_*` field names.
-
-Verify the update succeeded (success code or response) before moving to the next student.
-
-## Step 5 — Summary report
+## Step 6 — Summary report
 
 At the end, output:
 ```
-Processed N students (X SO assessments, Y STAM assessments).
+Processed N students (X SO, Y STAM).
 Verdicts:
   Likely Genuine: A
   Needs Review: B
   Unlikely: C
   Insufficient Data: D
 Errors: E
-  - <student_id>: <brief error>
 ```
 
 ## Error handling
 
-- If any single student's query or write fails, log the specific error and continue with the next. Do not abort.
-- If you can't find the right connector tool, do the best enumeration you can (list available tools, pick something sensible) and try. Only if that fails, report it in the summary.
+- If a single student's query or write fails, log the error and continue. Do not abort.
+- If fewer than 10 students are returned, that's fine — just process what's there.
+- If the MCP tool returns an error on update, log it in the summary but keep processing.
 
 ---
 
 # SO ASSESSMENT CRITERIA
 
-**Shomer Shabbos (SO)** = fully observes Shabbat. No melacha from Friday sundown to Saturday nightfall. Lights candles, makes kiddush, honors the three Shabbat meals. Refrains from driving, electronics, writing, shopping, etc.
+**Shomer Shabbos (SO)** = fully observes Shabbat per halacha: no melacha from Friday sundown to Saturday nightfall, lights candles, makes kiddush, honors the three Shabbat meals. No driving, electronics, writing, shopping, etc.
 
-**"Became" = the student was NOT observing Shabbos when she started engaging with Souled, and became observant as a result.** A significant life transformation. Typically months to years — not weeks.
+**"Became" requires ALL FOUR CHECKS to pass:**
+1. Halachically Jewish (per Orthodox standards — mother's Jewish status is decisive)
+2. Was NOT Shomer Shabbos when she started meeting with Souled coach
+3. IS Shomer Shabbos now
+4. The transformation was driven by Souled coaching
 
-**"Already was" = was already observing Shabbos before Souled.** If from an observant family (even imperfectly Orthodox from birth), that is "Already was" — NOT "Became".
+**Critical caveat on Check 1:** Coaches have made mistakes about halachic Jewish status. A student was once assumed Jewish-born but — after 20 meetings — turned out to be adopted and not halachically Jewish. READ the notes carefully for any ambiguity, conversion discussion, adoption mentions, or maternal lineage concerns. If the notes raise doubt even when the field says Yes, flag it.
 
-## Positive signals for "Became"
+## Positive signals
 - 10+ documented touchpoints over months
-- Touchpoint comments reference Shabbos journey: "starting to keep Shabbos", "first time keeping", "struggled with electronics", "made kiddush", "lit candles", "went to a Shabbos meal"
-- Gradual progression visible across comments (early: basics; later: deeper observance)
-- Attended Shabbatons, retreats, immersive experiences
+- Touchpoints explicitly describe the Shabbos journey: "first time keeping", "struggled with electronics", "made kiddush", "lit candles"
+- Early touchpoints describe her non-observant starting point, later ones describe her keeping
+- Supervision notes confirm real transformation
+- Attended Shabbatons, retreats
 - Long coaching relationship (6+ months)
-- High class attendance
-- Growth_Steps_Category entries mention Shabbat/Shabbos
+- Growth_Steps_Category mentions Shabbos
 
-## Red flags (suggest mislabeling)
+## Red flags
+- Halachic status ambiguous in notes
 - Very few touchpoints (0-3)
-- No touchpoint comments at all, or comments that don't mention Shabbos observance
-- All meetings in a short window (a week or two)
-- Background signals prior observance: Affiliation = Orthodox, observant family, Jewish day school
-- **Date_Became_SO__c = 2025-01-01 is a KNOWN BATCH UPDATE, not a real date** — treat as a red flag
-- Souled_Status__c is "Never Matched", "Unfit for Program", or "Stopped Meeting with a Coach" with brief engagement
+- No touchpoint comments mention Shabbos observance
+- `Affiliation__c` = Orthodox AND no narrative of becoming observant
+- Background signals prior observance (Jewish day school, Orthodox family)
+- `Date_Became_SO__c` = 2025-01-01 (known batch update date — not real)
+- Souled_Status__c is "Never Matched", "Unfit for Program", or "Stopped Meeting with a Coach" with brief engagement and no positive outcome in notes
 - No coaching relationships on record
-
-## Confidence calibration
-- 85-100: very clear case either way
-- 60-84: strong lean but not certain
-- 40-59: genuinely mixed signals
-- 0-39: too little data
-
-Be fair but rigorous. When in doubt, prefer `Needs Review` over falsely approving. The program's integrity depends on accurate outcome reporting.
 
 ---
 
 # STAM ASSESSMENT CRITERIA
 
-**Shomer Torah and Mitzvos (STAM)** = fully observant across the Torah: keeps kosher, davens regularly, observes holidays fully, studies Torah, observes taharas hamishpacha if married, keeps tzniut, lives a fully halachic life.
+**Shomer Torah and Mitzvos (STAM)** = fully observant across the Torah: kosher, davens regularly, observes holidays fully, Torah study, taharas hamishpacha if married, tzniut, halachic lifestyle.
 
-**"Became" = student was NOT fully Torah-observant when she joined Souled, became so through the program.** Bigger transformation than SO — touches every area of life. Typically 1-3+ years.
+**"Became" requires ALL FOUR CHECKS to pass, at a higher bar than SO:**
+1. Halachically Jewish (same as SO — read notes carefully)
+2. Was NOT STAM-observant when she started (typically was not even SO)
+3. IS STAM-observant now
+4. The transformation was driven by Souled
 
 ## Relationship to SO
-Becoming STAM typically requires being SO first. If Shabbos_Observant__c is "No" or "Already was" but STAM__c is "Became", examine carefully — ordering is unusual and suggests possible mislabeling.
+Becoming STAM almost always requires being SO first. If Shabbos_Observant__c is "No" or "Already was" but STAM__c is "Became", examine carefully — this ordering is very unusual.
 
-## Positive signals for STAM "Became"
-- Long engagement (12+ months of coaching)
-- Many touchpoints (often 20+) across multiple mitzvah areas
-- Touchpoint comments span a range: kosher, davening, holidays, learning, tzniut, family purity
-- Growth_Steps_Category shows diversity (not just Shabbos)
-- Attended seminary (Months_In_Seminary__c > 0) — major signal
+## Positive signals
+- Long engagement (12+ months)
+- 20+ touchpoints covering multiple mitzvah areas: kosher, davening, holidays, learning, tzniut, family purity
+- Growth_Steps_Category spans a range (not just Shabbos)
+- Attended seminary (`Months_In_Seminary__c` > 0) — major signal
 - Multiple trips / immersive experiences
-- Often paired with Shabbos_Observant__c = "Became" and Keeps_tzniut__c = "Became"
+- Supervision notes confirm STAM-level commitment
+- Often paired with Shabbos_Observant__c = "Became" AND Keeps_tzniut__c = "Became"
 
-## Red flags for STAM
-- Same as SO, amplified — STAM is a bigger claim
+## Red flags
+- All SO red flags, plus:
 - Under 10 touchpoints — STAM in so little engagement is nearly impossible
-- Touchpoints cover only one topic (e.g., only Shabbos) but STAM is "Became"
-- Student still shows "No" or null on related fields (e.g., Keeps_tzniut__c is null but STAM = "Became" — inconsistent)
+- Touchpoints cover only one topic (e.g., only Shabbos)
+- Inconsistent fields (e.g., Keeps_tzniut__c null or No, but STAM = Became)
 - Short relationship (<6 months)
-- Date_Became_SO__c = 2025-01-01 (batch update)
-- Souled_Status__c indicates minimal engagement
+- Supervision notes describe only partial progress
 
-Hold STAM to a higher bar than SO. When in doubt, prefer `Needs Review`.
+Hold STAM to a strictly higher bar than SO. When in doubt, prefer `Needs Review`.

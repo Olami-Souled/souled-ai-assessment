@@ -39,6 +39,14 @@ All four must pass for "Likely Genuine". The agent reads:
    - Sort: verdict (Unlikely first), then confidence desc
 2. **Before-save Flow** to auto-populate `SO_Confirmed_By__c` + `SO_Confirmed_Date__c` when manager ticks the confirmed box
 3. **Dashboard integration** — add "Show only confirmed SO/STAM" toggle to the souled-coach-outcomes dashboard (follow-up)
+4. **Profile-level FLS** — currently granted via permset assigned to 10 staff. New users joining won't automatically see fields unless the permset is assigned. Options: deploy FLS directly on Standard User profile, or include the permset in an auto-assignment.
+
+## Reports (deployed)
+
+- **SO:** https://jewishunityinternational.lightning.force.com/lightning/r/Report/00ORi00000M30ObMAJ/view (developer name `AI_SO_STAM_report_0DZ`)
+- **STAM:** https://jewishunityinternational.lightning.force.com/lightning/r/Report/00ORi00000M30QDMAZ/view (developer name `AI_STAM_assessment_report`)
+
+Both filtered to `AI_<metric>_Assessment__c != null` and share the same column set (Name, Coach, status, assessment text, confidence, verdict, confirmed + metadata).
 
 ## Critical files to read when resuming
 

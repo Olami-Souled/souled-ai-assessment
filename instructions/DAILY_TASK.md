@@ -188,7 +188,7 @@ Then call `salesforce_update_contact` with:
   - `AI_SO_Verdict__c` (or `AI_STAM_Verdict__c`): the verdict string
   - `AI_SO_Confidence__c`: integer 0-100
   - `AI_SO_Assessment__c`: the formatted text (truncate at 32000 chars)
-  - `AI_SO_Assessed_Date__c`: current UTC datetime in format `2026-04-19T11:30:00.000+0000`
+  - `AI_SO_Assessed_Date__c` (or `AI_STAM_Assessed_Date__c`): current date in format `YYYY-MM-DD` (e.g. `2026-04-19`). Field is Date, not DateTime — do NOT include a time component.
 
 ## Step 6 — Summary report
 

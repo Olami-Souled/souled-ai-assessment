@@ -11,10 +11,12 @@ Use the **Souled Salesforce** connector (MCP) for all reads and writes. It expos
 - `salesforce_update_contact` — patch fields on a Contact by Id
 
 ## Limits
-- Process at most **10 students per run** (reduced from 20 because each student now requires deeper analysis including notes + supervision records).
+- **BACKFILL MODE (temporary):** Process up to **30 SO students per run** from the "Became SO Since 09.01.2024 not confirmed" report backfill. Will be reverted after this backfill is complete.
 - Write output in **ASCII only** — no em-dashes, bullet symbols, or warning emoji. Use `-`, `*`, and `[!]` instead.
 
 ## Step 1 — Find unassessed students
+
+**BACKFILL MODE:** SO query restricted to the 30 IDs below (from report `00ORi00000M6UA1MAN`). STAM query unchanged.
 
 Query for SO candidates:
 ```sql
@@ -23,8 +25,9 @@ WHERE Shabbos_Observant__c = 'Became'
   AND AI_SO_Assessed_Date__c = null
   AND Test_Old__c = false
   AND (NOT Name LIKE '%test%')
+  AND Id IN ('0035f0000151G4ZAAU','0035f00000FuxpIAAR','0035f00001jVN3aAAG','0035f00001SDrs1AAD','0035f00000vQDXRAA4','0035f00001WMVp3AAH','0035f00000smY8rAAE','0035f0000152dmPAAQ','0035f00001G0BmxAAF','0035f00001ekmEIAAY','0035f00000cgKQrAAM','0035f00000qd8VeAAI','0035f00001bjBNKAA2','0035f00000cgM4lAAE','0035f00001SEQ5SAAX','0035f00000z2IwgAAE','0035f00000FuxrQAAR','0035f00000ceKxvAAE','0035f00001bhO2nAAE','0035f00001WNK07AAH','0035f00000ceZ6DAAU','0035f00001FxkrHAAR','0035f00000wwuC0AAI','0035f00000FvEVRAA3','0035f0000152lYIAAY','0035f00000PplbHAAR','0035f00001OY3UTAA1','0035f00001bk99QAAQ','0035f00001jTzcEAAS','0035f00001jUq6JAAS')
 ORDER BY CreatedDate DESC
-LIMIT 10
+LIMIT 30
 ```
 
 Query for STAM candidates:

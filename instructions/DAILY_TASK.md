@@ -203,6 +203,20 @@ Verdicts:
 Errors: E
 ```
 
+## Step 7 — Heartbeat
+
+After step 6, send a heartbeat so the Bina process monitor records this run. Fill in the actual counts from your step 6 summary:
+
+```bash
+SUMMARY="Processed N students (X SO, Y STAM). Likely Genuine: A, Needs Review: B, Unlikely: C"
+curl -s -X POST "https://bina.olami.org/api/admin/processes/trig_01JNWzHfsEJ3KBnXsNNm7jyq/heartbeat" \
+  -H "Content-Type: application/json" \
+  -H "x-heartbeat-key: e4e7dccbc3174bc3e7e155b908bc306cac9f55c84508d66cb4cd2b40e7674809" \
+  --data-raw "{\"status\":\"completed\",\"summary\":\"$SUMMARY\"}" || true
+```
+
+This is best-effort — a failure here does not affect the run result.
+
 ## Error handling
 
 - If a single student's query or write fails, log the error and continue. Do not abort.

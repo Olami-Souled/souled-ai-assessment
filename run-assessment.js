@@ -194,6 +194,7 @@ async function run() {
 
   const counts = {};
   let processed = 0, errors = 0;
+  const lines = [];
 
   for (const { Id, Name, metric } of pairs) {
     try {
@@ -213,9 +214,11 @@ async function run() {
       counts[assessment.verdict] = (counts[assessment.verdict] || 0) + 1;
       processed++;
       console.log(`    -> ${assessment.verdict} (${assessment.confidence}%)`);
+      lines.push(`${Name} (${metric}): ${assessment.verdict} (${assessment.confidence}%)`);
     } catch (err) {
       console.error(`  ERROR ${Name}: ${err.message}`);
       errors++;
+      lines.push(`${Name}: ERROR`);
     }
   }
 
@@ -223,8 +226,9 @@ async function run() {
   const nr = counts['Needs Review'] || 0;
   const ul = counts['Unlikely'] || 0;
   const id = counts['Insufficient Data'] || 0;
-  const summary = `Processed ${processed} students (${soResult.records.length} SO, ${stamResult.records.length} STAM). Likely Genuine: ${lg}, Needs Review: ${nr}, Unlikely: ${ul}, Insufficient Data: ${id}. Errors: ${errors}.`;
-  console.log(`\n${summary}`);
+  const header = `Processed ${processed} students (${soResult.records.length} SO, ${stamResult.records.length} STAM). Likely Genuine: ${lg}, Needs Review: ${nr}, Unlikely: ${ul}, Insufficient Data: ${id}. Errors: ${errors}.`;
+  const summary = lines.length ? `${header}\n\n${lines.join('\n')}` : header;
+  console.log(`\n${header}`);
   await sendHeartbeat(errors === pairs.length ? 'error' : 'ok', summary);
 }
 

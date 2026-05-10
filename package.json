@@ -1,0 +1,9 @@
+{
+  "name": "souled-ai-assessment",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "jsforce": "^2.0.0"
+  }
+}

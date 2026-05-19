@@ -46,12 +46,27 @@ RED FLAGS:
   [!] <flag 1, or "None" if none>`;
 
 async function loginSF() {
-  const conn = new jsforce.Connection({ loginUrl: 'https://login.salesforce.com' });
-  await conn.login(
-    process.env.SF_USERNAME,
-    (process.env.SF_PASSWORD || '') + (process.env.SF_SECURITY_TOKEN || '')
-  );
-  return conn;
+  const crypto = require('crypto');
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    iss: process.env.SF_CONSUMER_KEY,
+    sub: process.env.SF_USERNAME,
+    aud: 'https://login.salesforce.com',
+    exp: Math.floor(Date.now() / 1000) + 180,
+  })).toString('base64url');
+  const signingInput = `${header}.${payload}`;
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(signingInput);
+  const sig = sign.sign(process.env.SF_PRIVATE_KEY, 'base64url');
+  const assertion = `${signingInput}.${sig}`;
+  const resp = await fetch('https://login.salesforce.com/services/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
+  });
+  if (!resp.ok) throw new Error(`SF JWT auth failed: ${await resp.text()}`);
+  const { access_token, instance_url } = await resp.json();
+  return new jsforce.Connection({ accessToken: access_token, instanceUrl: instance_url });
 }
 
 async function gatherContext(sf, id) {

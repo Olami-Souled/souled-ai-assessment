@@ -25,8 +25,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SF_USERNAME: ${{ secrets.SF_USERNAME }}
-          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
-          SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
+          SF_CONSUMER_KEY: ${{ secrets.SF_CONSUMER_KEY }}
+          SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
           PROCESS_HEARTBEAT_KEY: ${{ secrets.PROCESS_HEARTBEAT_KEY }}
           BASE_URL: https://bina.olami.org
         run: node run-assessment.js

@@ -11,7 +11,7 @@ Quick context for picking up in a new Claude Code session.
 | Piece | Location |
 |---|---|
 | Salesforce custom fields (14) | Contact object, permission set `Souled_AI_Assessment_Admin` |
-| MCP server | https://souled-sf-mcp-production.up.railway.app (Railway project `souled-sf-mcp`) |
+| MCP server | https://souled-sf-mcp-104676216490.us-east1.run.app (Google Cloud Run, project `olami-services`) |
 | MCP connector on claude.ai | "Souled Salesforce" — URL with `?k=<token>` auth |
 | Scheduled remote trigger | `trig_01JNWzHfsEJ3KBnXsNNm7jyq`, cron `3 4 * * *` UTC (7:03 AM Jerusalem) |
 | GitHub repos | `Olami-Souled/souled-ai-assessment`, `Olami-Souled/souled-sf-mcp`, `Olami-Souled/souled-coach-outcomes` |

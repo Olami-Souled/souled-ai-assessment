@@ -29,4 +29,5 @@ jobs:
           SF_PRIVATE_KEY: ${{ secrets.SF_PRIVATE_KEY }}
           PROCESS_HEARTBEAT_KEY: ${{ secrets.PROCESS_HEARTBEAT_KEY }}
           BASE_URL: https://bina.olami.org
+          SF_LOGIN_URL: https://jewishunityinternational.my.salesforce.com
         run: node run-assessment.js

@@ -51,7 +51,7 @@ async function loginSF() {
   const payload = Buffer.from(JSON.stringify({
     iss: process.env.SF_CONSUMER_KEY,
     sub: process.env.SF_USERNAME,
-    aud: 'https://login.salesforce.com',
+    aud: process.env.SF_LOGIN_URL || 'https://login.salesforce.com',
     exp: Math.floor(Date.now() / 1000) + 180,
   })).toString('base64url');
   const signingInput = `${header}.${payload}`;
@@ -59,7 +59,7 @@ async function loginSF() {
   sign.update(signingInput);
   const sig = sign.sign(process.env.SF_PRIVATE_KEY, 'base64url');
   const assertion = `${signingInput}.${sig}`;
-  const resp = await fetch('https://login.salesforce.com/services/oauth2/token', {
+  const resp = await fetch(`${process.env.SF_LOGIN_URL || 'https://login.salesforce.com'}/services/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),

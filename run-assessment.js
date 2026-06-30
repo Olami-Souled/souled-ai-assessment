@@ -179,12 +179,21 @@ async function sendHeartbeat(status, summary) {
   const key = process.env.PROCESS_HEARTBEAT_KEY;
   if (!key) return;
   try {
-    await fetch(`${BASE_URL}/api/admin/processes/${PROCESS_ID}/heartbeat`, {
+    const r = await fetch(`${BASE_URL}/api/admin/processes/${PROCESS_ID}/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-heartbeat-key': key },
       body: JSON.stringify({ status, summary }),
     });
-  } catch { /* best effort */ }
+    // Best-effort, but never silent: a non-2xx (e.g. 401 bad key, 404 unknown
+    // process, 5xx) used to be swallowed, which let the heartbeat go dark for
+    // days while the job itself stayed green and the monitor showed "stale".
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      console.warn(`[heartbeat] POST ${PROCESS_ID} -> ${r.status} ${r.statusText} ${body.slice(0, 200)}`);
+    }
+  } catch (e) {
+    console.warn(`[heartbeat] POST ${PROCESS_ID} failed: ${e.message}`);
+  }
 }
 
 async function run() {

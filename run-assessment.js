@@ -69,6 +69,25 @@ async function loginSF() {
   return new jsforce.Connection({ accessToken: access_token, instanceUrl: instance_url });
 }
 
+// Transient Salesforce network/server errors (a dropped socket, a brief 5xx)
+// should not cost a student their assessment for the day. Retry the SF op once
+// after a short pause; only a second failure counts. Non-transient errors
+// (INVALID_FIELD, auth, malformed data) are re-thrown immediately so real bugs
+// still surface. Guards against the ECONNRESET false alarm on 2026-08-20, where
+// a single dropped write-back socket tripped the whole run red.
+const TRANSIENT_SF = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|network timeout|server error|\b50[0234]\b/i;
+
+async function withSfRetry(label, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!TRANSIENT_SF.test(err.message || '')) throw err;
+    console.warn(`  transient SF error on ${label} (${err.message}); retrying once...`);
+    await new Promise(r => setTimeout(r, 2000));
+    return await fn();
+  }
+}
+
 async function gatherContext(sf, id) {
   const [contact, touchpoints, relationships, supervisions, engagements] = await Promise.all([
     sf.query(`SELECT Id, Name, Age__c, Country__c, Affiliation__c,
@@ -223,7 +242,7 @@ async function run() {
   for (const { Id, Name, metric } of pairs) {
     try {
       console.log(`  ${Name} (${metric})...`);
-      const ctx = await gatherContext(sf, Id);
+      const ctx = await withSfRetry(`gatherContext ${Name}`, () => gatherContext(sf, Id));
       const contextText = formatContext(ctx, metric);
 
       const resp = await ai.messages.create({
@@ -234,7 +253,7 @@ async function run() {
       });
 
       const assessment = parseAssessment(resp.content.find(b => b.type === 'text')?.text || '');
-      await writeAssessment(sf, Id, metric, assessment);
+      await withSfRetry(`writeAssessment ${Name}`, () => writeAssessment(sf, Id, metric, assessment));
       counts[assessment.verdict] = (counts[assessment.verdict] || 0) + 1;
       processed++;
       console.log(`    -> ${assessment.verdict} (${assessment.confidence}%)`);
@@ -242,7 +261,11 @@ async function run() {
     } catch (err) {
       console.error(`  ERROR ${Name}: ${err.message}`);
       errors++;
-      lines.push(`${Name}: ERROR`);
+      // Carry the real error string into the heartbeat summary so the Failure
+      // Responder diagnoses the actual cause (e.g. "read ECONNRESET") instead of
+      // confabulating a "missing/malformed student data" story from the bare word
+      // ERROR (exactly what happened for Nora Monasheri on 2026-08-20).
+      lines.push(`${Name} (${metric}): ERROR - ${(err.message || 'unknown').slice(0, 200)}`);
     }
   }
 
@@ -253,7 +276,13 @@ async function run() {
   const header = `Processed ${processed} students (${soResult.records.length} SO, ${stamResult.records.length} STAM). Likely Genuine: ${lg}, Needs Review: ${nr}, Unlikely: ${ul}, Insufficient Data: ${id}. Errors: ${errors}.`;
   const summary = lines.length ? `${header}\n\n${lines.join('\n')}` : header;
   console.log(`\n${header}`);
-  await sendHeartbeat(errors === pairs.length ? 'error' : 'ok', summary);
+  // Only flag a real outage. A lone transient failure (already retried once
+  // above) must not turn the whole run red — with a batch of one, the old
+  // `errors === pairs.length` rule tripped on any single blip. Require the
+  // failure to be both plural and a majority; a single stuck student stays
+  // queued (its Assessed_Date is still null) and is retried next scheduled run.
+  const isOutage = errors > 1 && errors >= Math.ceil(pairs.length / 2);
+  await sendHeartbeat(isOutage ? 'error' : 'ok', summary);
 }
 
 run().catch(err => { console.error(err); process.exit(1); });
